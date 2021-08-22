@@ -493,7 +493,7 @@ int main()
         totalScore += turnScore;
         fprintf(stderr, "turn score: %d; total score: %d\n", turnScore, totalScore);
 
-        printf("%d %d\n", turnData.humanList[0].position.x, turnData.humanList[0].position.y); // Your destination coordinates
+        printf("%d %d\n", turnData.hero.position.x, turnData.hero.position.y);
     }
 
     return 0;
