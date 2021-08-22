@@ -28,10 +28,11 @@ doubleComboAndDoubleRescue.c : 27340 points :
     the hero looks for the best combo in the next 2 turns
     known bug : bugy and too slow
 
-
-
-
 depthFirst.c : :
     explore the graph of possibilities as deep as soon as possible before backtracking
+
+skeleton.c
+    refactor of singleRescue
+    The point of this "skeleton" file is to serve as a basis to other strategies
 
 beamsearch.c : : todo
