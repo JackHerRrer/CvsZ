@@ -23,6 +23,8 @@
 
 #define MAX_DIST 19000 //18357 in reality
 
+#define STRATEGY_MAX_STEP 50
+
 typedef struct POSITION{
     int x;
     int y;
@@ -44,11 +46,13 @@ typedef struct ZOMBIE{
     int closestHumanIndex;
     POSITION targetPosition;
     POSITION receivedTargetPosition;
-    int squareDistTotargetPosition;
+    int squareDistTotarget;
     int squareDistToHero;
 } ZOMBIE;
 
 typedef struct TURN_DATA{
+    int totScore;
+
     CHARAC hero;
 
     int firstHumanIndex;
@@ -61,8 +65,13 @@ typedef struct TURN_DATA{
 } TURN_DATA;
 
 typedef struct STRATEGY{
-    int score;
-    POSITION trajectory[100];
+    int totScore;
+    int currentAction;
+    int totalActions;
+    POSITION trajectory[STRATEGY_MAX_STEP];
+    int turnScore[STRATEGY_MAX_STEP];
+    int humansLeft[STRATEGY_MAX_STEP];
+    int zombiesLeft[STRATEGY_MAX_STEP];
 } STRATEGY;
 
 // retrieve data from the game
@@ -117,6 +126,16 @@ TURN_DATA initTurnData(){
     return data;
 }
 
+// find the next zombie in the chain list
+int getNextZombie(TURN_DATA * const turnData, int currentZombie){
+    return turnData->zombieList[currentZombie].charac.nextCharac;
+}
+
+// find the next human in the chain list
+int getNextHuman(TURN_DATA * const turnData, int currentHuman){
+    return turnData->humanList[currentHuman].nextCharac;
+}
+
 void displayTurnData(TURN_DATA * const turnData){
     fprintf(stderr, "hero: %d, %d\n", turnData->hero.position.x, turnData->hero.position.y);
 
@@ -124,9 +143,10 @@ void displayTurnData(TURN_DATA * const turnData){
     // iterates over the zombie chained list from the begining until the chain is over
     int currentZombieIndex = turnData->firstZombieIndex;
     while (currentZombieIndex != NO_MORE_CHARAC){
-        fprintf(stderr, "  index: %d, x: %.5d y: %.5d, dToH: %d\t, tx: %.5d, ty: %.5d, prevZ: %d, nextZ: %d\n", 
+        fprintf(stderr, "  index: %d, x: %.5d y: %.5d, dTot: %d, dToH: %d, tx: %.5d, ty: %.5d, prevZ: %d, nextZ: %d\n", 
                 currentZombieIndex, turnData->zombieList[currentZombieIndex].charac.position.x, 
                 turnData->zombieList[currentZombieIndex].charac.position.y, 
+                turnData->zombieList[currentZombieIndex].squareDistTotarget,
                 turnData->zombieList[currentZombieIndex].squareDistToHero,
                 turnData->zombieList[currentZombieIndex].targetPosition.x,
                 turnData->zombieList[currentZombieIndex].targetPosition.y,
@@ -136,16 +156,16 @@ void displayTurnData(TURN_DATA * const turnData){
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
 
-    fprintf(stderr, "humans alive: %d\n", turnData->aliveZombieCount);
-    // iterates over the zombie chained list from the begining until the chain is over
-    int currentHumanIndex = turnData->firstHumanIndex;
-    while (currentHumanIndex != NO_MORE_CHARAC){
-        fprintf(stderr, "  index: %d, x: %d; y: %d\n", 
-                currentHumanIndex, 
-                turnData->humanList[currentHumanIndex].position.x, 
-                turnData->humanList[currentHumanIndex].position.y);
-        currentHumanIndex = getNextHuman(turnData, currentHumanIndex);
-    }
+    fprintf(stderr, "humans alive: %d\n", turnData->aliveHumanCount);
+    // iterates over the human chained list from the begining until the chain is over
+    // int currentHumanIndex = turnData->firstHumanIndex;
+    // while (currentHumanIndex != NO_MORE_CHARAC){
+    //     fprintf(stderr, "  index: %d, x: %d; y: %d\n", 
+    //             currentHumanIndex, 
+    //             turnData->humanList[currentHumanIndex].position.x, 
+    //             turnData->humanList[currentHumanIndex].position.y);
+    //     currentHumanIndex = getNextHuman(turnData, currentHumanIndex);
+    // }
     fprintf(stderr, "\n");
 }
 
@@ -153,16 +173,6 @@ void displayTurnData(TURN_DATA * const turnData){
 // the square is returned to avoid using sqrt() function, thus saving precious exec time
 int getSquareDistance(int const x1, int const y1, int const x2, int const y2){
     return (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
-}
-
-// find the next zombie in the chain list
-int getNextZombie(TURN_DATA * const turnData, int currentZombie){
-    return turnData->zombieList[currentZombie].charac.nextCharac;
-}
-
-// find the next human in the chain list
-int getNextHuman(TURN_DATA * const turnData, int currentHuman){
-    return turnData->humanList[currentHuman].nextCharac;
 }
 
 // find the target of all the zombies
@@ -190,7 +200,7 @@ void updateZombieTarget(TURN_DATA * const turnData){
                 // update the target with the hero data
                 turnData->zombieList[currentZombieIndex].closestHumanIndex = HERO;
                 turnData->zombieList[currentZombieIndex].targetPosition = turnData->hero.position;
-                turnData->zombieList[currentZombieIndex].squareDistTotargetPosition = turnData->zombieList[currentZombieIndex].squareDistToHero;
+                turnData->zombieList[currentZombieIndex].squareDistTotarget = turnData->zombieList[currentZombieIndex].squareDistToHero;
             }
         }
         // if the target of the zombie as not been processed,
@@ -220,14 +230,14 @@ void updateZombieTarget(TURN_DATA * const turnData){
                 // update the target with the hero data
                 turnData->zombieList[currentZombieIndex].closestHumanIndex = HERO;
                 turnData->zombieList[currentZombieIndex].targetPosition = turnData->hero.position;
-                turnData->zombieList[currentZombieIndex].squareDistTotargetPosition = turnData->zombieList[currentZombieIndex].squareDistToHero;
+                turnData->zombieList[currentZombieIndex].squareDistTotarget = turnData->zombieList[currentZombieIndex].squareDistToHero;
             }
             // if a human is closer
             else {
                 // update the target with the human data
                 turnData->zombieList[currentZombieIndex].closestHumanIndex = closestHumanIndex;
                 turnData->zombieList[currentZombieIndex].targetPosition = turnData->humanList[closestHumanIndex].position;
-                turnData->zombieList[currentZombieIndex].squareDistTotargetPosition = smallestDist;
+                turnData->zombieList[currentZombieIndex].squareDistTotarget = smallestDist;
             }
         }
 
@@ -245,7 +255,7 @@ void moveZombies(TURN_DATA * const turnData){
         // fprintf(stderr, "zombie %d: cx: %d, cy: %d\n", currentZombieIndex, currentZombie.charac.position.x, currentZombie.charac.position.y);
 
         // if the zombie is within reach of its target
-        if (currentZombie.squareDistTotargetPosition <= ZOMBIE_STEP * ZOMBIE_STEP){
+        if (currentZombie.squareDistTotarget <= ZOMBIE_STEP * ZOMBIE_STEP){
             // its postions is simply its target position
             turnData->zombieList[currentZombieIndex].charac.position = currentZombie.targetPosition;
         }
@@ -281,8 +291,12 @@ void moveZombies(TURN_DATA * const turnData){
                 
                 // update the zombie postion
                 turnData->zombieList[currentZombieIndex].charac.position.x = cos(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
-                turnData->zombieList[currentZombieIndex].charac.position.y = sin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;            }
+                turnData->zombieList[currentZombieIndex].charac.position.y = sin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;            
+            }
         }
+
+        // update the square dist between the zombie and the target 
+        turnData->zombieList[currentZombieIndex].squareDistTotarget = getSquareDistance(turnData->zombieList[currentZombieIndex].charac.position.x, turnData->zombieList[currentZombieIndex].charac.position.y, currentZombie.targetPosition.x, currentZombie.targetPosition.y);
 
         // fprintf(stderr, "zombie %d: tx: %d; ty: %d, Nx: %d, Ny: %d\n", 
         //         currentZombieIndex, 
@@ -296,7 +310,7 @@ void moveZombies(TURN_DATA * const turnData){
 }
 
 // update the distance between the hero and the zombies
-// to avoid unecessary process time, olny the zombies that can potentialy be reached by the hero are updated
+// to avoid unecessary process time, only the zombies that can potentialy be reached by the hero are updated
 // the others are left as is 
 void updateZombieDistToHero(TURN_DATA * const turnData){
     // iterates over the zombie chained list from the begining until the chain is over
@@ -349,7 +363,7 @@ int resolveConflicts(TURN_DATA * const turnData){
     while (currentZombieIndex != NO_MORE_CHARAC){
         ZOMBIE currentZombie = turnData->zombieList[currentZombieIndex];
         // if the zombie is within range of the hero
-        if (currentZombie.squareDistToHero <= HERO_RANGE * HERO_RANGE){
+        if (currentZombie.squareDistToHero < HERO_RANGE * HERO_RANGE){
             // decrease the alive zombie counter
             turnData->aliveZombieCount--;
             // set the status of the zombie as dead
@@ -414,22 +428,87 @@ int resolveConflicts(TURN_DATA * const turnData){
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
 
+    // if no human is alive, turn score is -1
+    if (turnData->aliveHumanCount == 0){
+        turnData->totScore = -1;
+        return -1;
+    }
+
     // calculate how many point has been earned
     score = getTurnScore(oldHumanCount, oldZombieCount - turnData->aliveZombieCount);
+    
+    // add it to the turndata tot score
+    turnData->totScore += score;
 
     //fprintf(stderr, "zombies before %d, and after %d\n", oldZombieCount, turnData->aliveZombieCount);
-
     return score;
 }
 
 
 // function used to determine the X and Y position of the hero depending on its current location
 // an angle and a distance
+int getHeroNextPosition(TURN_DATA * const turnData, double const angle, double const distance){
+            
+    // if the charac goes up 
+    if (angle == 90){
+        turnData->hero.position.y -= distance;
+    }
+    // if the charac goes down 
+    else if (angle == -90){
+        turnData->hero.position.y += distance;
+    }    
+    // if the charac goes right
+    else if (angle == 0){
+        turnData->hero.position.x += distance;
+    }
+    // if the charac goes left
+    else if (angle == 180){
+        turnData->hero.position.x -= distance;
+    }    
+    // if the charac is not aligned 
+    else { 
+        double radAngle = angle / 180 * M_PI;
+
+        // update the charac postion
+        turnData->hero.position.x = cos(radAngle) * distance + turnData->hero.position.x;
+        turnData->hero.position.y = sin(radAngle) * distance + turnData->hero.position.y;
+    }
+
+    // if the charac is out of the map return -1
+    if (turnData->hero.position.y < 0 || turnData->hero.position.y > HEIGHT || turnData->hero.position.x < 0 || turnData->hero.position.y > WIDTH)
+        return -1;
+    else 
+        return 0;
+}
+
+
+
+// function used to determine the X and Y position of the hero depending on its current location
+// an angle and a distance
 void randomlyMoveHero(TURN_DATA * const turnData){   
 
-    int x = random() % (2*HERO_MVMT) - HERO_MVMT;
-    int y = random() % (2*HERO_MVMT) - HERO_MVMT;
-    
+    int dist = random() % HERO_MVMT;
+    int angle = random() % 360;
+
+    getHeroNextPosition(turnData, angle, dist);                                                                                                                                                                                     
+
+    if (turnData->hero.position.x < 0)
+        turnData->hero.position.x = 0;
+    else if (turnData->hero.position.x > WIDTH)
+        turnData->hero.position.x = WIDTH;
+
+    if (turnData->hero.position.y < 0)
+        turnData->hero.position.y = 0;
+    else if (turnData->hero.position.y > HEIGHT)
+        turnData->hero.position.y = HEIGHT;
+
+    //int x = random() % (2*HERO_MVMT) - HERO_MVMT;
+
+    //int maxY = sqrt(HERO_MVMT * HERO_MVMT - x*x);
+
+    //int maxY = HERO_MVMT;
+    // int y = random() % (2*maxY) - maxY;
+    /*
     turnData->hero.position.x = turnData->hero.position.x + x;
     if (turnData->hero.position.x < 0)
         turnData->hero.position.x = 0;
@@ -442,7 +521,103 @@ void randomlyMoveHero(TURN_DATA * const turnData){
         turnData->hero.position.y = 0;
     else if (turnData->hero.position.y > HEIGHT)
         turnData->hero.position.y = HEIGHT;
+        */
 
+    
+
+}
+
+
+// function that sends the hero toward the first human and update its position accordingly
+void moveHero(TURN_DATA * const turnData){
+    // find the hero next position
+    int zadX = turnData->humanList[turnData->firstHumanIndex].position.x;
+    int zadY = turnData->humanList[turnData->firstHumanIndex].position.y;
+
+    int squareDistFromZad = getSquareDistance(zadX, zadY, turnData->hero.position.x, turnData->hero.position.y);
+
+    //fprintf(stderr, "square dist from zad: %d\n", squareDistFromZad);
+
+    if (squareDistFromZad <= HERO_MVMT * HERO_MVMT){
+        turnData->hero.position.x = zadX;
+        turnData->hero.position.y = zadY; 
+    }
+    else {
+        double ratio = 1000 / (double)sqrtf(squareDistFromZad);
+        int additionalX = (int)(ratio * (double)abs(zadX - turnData->hero.position.x));
+        int additionalY = (int)(ratio * (double)abs(zadY - turnData->hero.position.y));
+        if (turnData->hero.position.x < zadX)
+            turnData->hero.position.x += additionalX;
+        else
+            turnData->hero.position.x -= additionalX + 1;
+
+        if (turnData->hero.position.y < zadY)
+            turnData->hero.position.y += additionalY;
+        else
+            turnData->hero.position.y -= additionalY + 1;
+            //fprintf(stderr, "ratio, %f, hero ex %d, ey %d\n", ratio, turnData->hero.position.x, turnData->hero.position.y);
+        }
+
+}
+
+int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
+
+    // inits the strategy
+    strategy->totalActions = 0;
+    strategy->totScore = turnData->totScore;
+    strategy->currentAction = 0;
+
+    // as long as the there is not too many steps in the strategy
+    // and there are zombies left
+    // and there are humans left
+    while (strategy->totalActions < STRATEGY_MAX_STEP && turnData->aliveHumanCount > 0 && turnData->aliveZombieCount > 0){    
+
+        // zombies target and and positions have been updated a first time just after the turn data has been gathered
+        // only update them if this is not the first step
+        if (strategy->totalActions > 0){
+            updateZombieTarget(turnData);
+            moveZombies(turnData);
+        }
+
+        // randomly choose where the hero will go and update its position accordingly
+        randomlyMoveHero(turnData);
+
+        // the distance between the hero and the zombies potentialy changed, so update it
+        updateZombieDistToHero(turnData);
+
+        // update which zombies and humans are alive 
+        // get the resulting score
+        int turnScore = resolveConflicts(turnData);
+
+        // stores the remaining humans and zombies count in the strategy (for debug purpose)
+        strategy->humansLeft[strategy->totalActions] = turnData->aliveHumanCount;
+        strategy->zombiesLeft[strategy->totalActions] = turnData->aliveZombieCount;
+
+        // displayTurnData(turnData);
+
+        // update the strategy score
+        // if every humans are dead
+        if (turnData->totScore == -1){
+            // ends this strategy
+            strategy->totScore = -1;
+            //fprintf(stderr, "tested strat: no more human at turn: %d\n", strategy->totalActions);
+            break;
+        }
+        
+        // update the strategy scores with the turn score
+        strategy->totScore = turnData->totScore;
+        strategy->turnScore[strategy->totalActions] = turnScore;
+
+        // add the action to the strategy
+        strategy->trajectory[strategy->totalActions] = turnData->hero.position;
+        strategy->totalActions++;
+    }
+
+    // if the strategy is too long to execute
+    if (strategy->totalActions >= STRATEGY_MAX_STEP - 1)
+        return -1;
+
+    return strategy->totScore;
 }
 
 int main()
@@ -452,46 +627,141 @@ int main()
 
     TURN_DATA turnData;
     int totalScore = 0;
+
+    // used to define how much time there is to process strategies
+    double maxTime = 0.97;
+
+    // used to store the best strategy found so far
+    STRATEGY bestStrategy;
+    bestStrategy.totScore = 0;
+    bestStrategy.totalActions = NOT_PROCESSED;
+
     // game loop
-    while (1) {
+    for (int turn = 1; 1; turn++) {
 
-        time_t start, end;
-
-        start = clock();
+        // reset the turn score
+        int turnScore = 0;
 
         // retrieves the input 
         turnData = initTurnData();
 
-        // find the targets of the zombies
+        // display the turn number, it must be done after the data has been retrieved otherwise it is considered has the previous turn
+        fprintf(stderr, "turn %d\n", turn);
+
+        // init the turn data score with the current total score
+        turnData.totScore = totalScore;
+
+        // find the targets of the zombies 
         updateZombieTarget(&turnData);
         
         // update their positions according to their target
-        moveZombies(&turnData);    
+        moveZombies(&turnData);
 
-        // choose where the hero will go and update its position accordingly
-        randomlyMoveHero(&turnData);
+        time_t start, end;
+        start = clock();
+        end = start;
+        int i;
 
-        // the distance between the hero and the zombies potentialy changed, so update it
-        updateZombieDistToHero(&turnData);
-
-        // update which zombies and humans are alive 
-        // get the resulting score
-        int turnScore = resolveConflicts(&turnData);
-        
-        end = clock();
-        fprintf(stderr, "exec time: %f\n", (double)(end - start) / CLOCKS_PER_SEC);
-        fprintf(stderr, " ---- after conflict ------ \n");
-        displayTurnData(&turnData);
-
-        if (turnScore == -1){
-            fprintf(stderr, "All humans are dead !\n");
-            return 0;
+        // if the first turn has already been processed 
+        if (turn > 1){
+            // update max time to less than 100ms
+            maxTime = 0.09999;
         }
 
+        for (i = 0; ((double)(end - start) / CLOCKS_PER_SEC) < maxTime; i++){
+
+            // copy the turn data to prevent corrupting it during strategy exploration
+            TURN_DATA currentTurnData = turnData;
+
+            // creates a strategy and tries it
+            STRATEGY randomStrategy;
+            int randomStrategyScore = tryRandomStrategy(&currentTurnData, &randomStrategy);
+
+            // if the strategy has a better score than the best strategy
+            if (randomStrategyScore > bestStrategy.totScore){
+
+                fprintf(stderr, "New best strategy: randStratScore: %d, old best strat %d\n", randomStrategyScore, bestStrategy.totScore);
+
+                // replace the old strategy with the new strategy
+                bestStrategy = randomStrategy;
+            }
+
+            end = clock();
+            //fprintf(stderr, "strat %d exec time: %f, score: %d, tot turn: %d\n", i, (double)(end - start) / CLOCKS_PER_SEC, randomStrategyScore, randomStrategy.totalActions);
+        }
+        
+        fprintf(stderr, "%d tested strat in %fs\n", i, (double)(end - start) / CLOCKS_PER_SEC);
+
+        // if no viable strategy has been found yet
+        if (bestStrategy.totalActions == NOT_PROCESSED){
+
+            // move  the hero toward the first human
+            moveHero(&turnData);
+            // the distance between the hero and the zombies potentialy changed, so update it
+            updateZombieDistToHero(&turnData);
+
+            // updates which zombies and humans are alive 
+            // get the resulting score
+            turnScore = resolveConflicts(&turnData);
+
+            //update the best strategy score with the turn score to avoid choosing the first random strategy when scores are compared
+            bestStrategy.totScore += turnScore;
+
+            // if moving toward the first human is not sufficient either
+            if (turnScore == -1){
+                fprintf(stderr, "All humans are dead !\n");
+                return 0;
+            }
+
+            fprintf(stderr, "No strategy found, going toward first human\n");
+            displayTurnData(&turnData);
+        }
+        // if a viable strategy has been found
+        else {
+            // update the turnData with strategy current step
+            turnData.hero.position = bestStrategy.trajectory[bestStrategy.currentAction];
+            // get the current step score
+            turnScore += bestStrategy.turnScore[bestStrategy.currentAction];
+            
+            // simulate the turn again even though it is useless for debug reasons
+            // the distance between the hero and the zombies potentialy changed, so update it
+            updateZombieDistToHero(&turnData);
+
+            displayTurnData(&turnData);
+
+            // updates which zombies and humans are alive 
+            // get the resulting score
+            resolveConflicts(&turnData);
+
+            fprintf(stderr, "best strategy: current step: %d, tot score: %d, turn score %d, hl: %d, zl: %d\n", 
+                    bestStrategy.currentAction, 
+                    bestStrategy.totScore, 
+                    bestStrategy.turnScore[bestStrategy.currentAction], 
+                    bestStrategy.humansLeft[bestStrategy.currentAction], 
+                    bestStrategy.zombiesLeft[bestStrategy.currentAction]
+                    );
+
+            // increase the current step
+            bestStrategy.currentAction++;
+        }
+
+        // update the total score with the turn score
         totalScore += turnScore;
+
         fprintf(stderr, "turn score: %d; total score: %d\n", turnScore, totalScore);
 
-        printf("%d %d\n", turnData.hero.position.x, turnData.hero.position.y);    }
+        // display a message when we expect the last turn
+        if (bestStrategy.totalActions != NOT_PROCESSED && bestStrategy.zombiesLeft[bestStrategy.currentAction - 1] == 0){
+            fprintf(stderr, "No more zombies. Expected end of game\n");
+        }
 
+        // display a message when we expect the last turn
+        if (bestStrategy.totalActions != NOT_PROCESSED && bestStrategy.humansLeft[bestStrategy.currentAction - 1] == 0){
+            fprintf(stderr, "No more humans. Expected loss of the game\n");
+        }
+
+        printf("%d %d\n", turnData.hero.position.x, turnData.hero.position.y);    
+    }
+    
     return 0;
 }
