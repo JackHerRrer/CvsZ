@@ -36,7 +36,7 @@ skeleton.c
     The point of this "skeleton" file is to serve as a basis to other strategies
 
 random.c
-    randomly try many strategies
+    randomly try as many strategies as possible
     a strategy is a serie of movement
     select the best one 
 

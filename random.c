@@ -261,38 +261,19 @@ void moveZombies(TURN_DATA * const turnData){
         }
         // if the zombie isn't within reach of its target 
         else {
-            // if the zombie is X aligned
-            if (currentZombie.charac.position.x == currentZombie.targetPosition.x){
-                // it only goes up or down 
-                if (currentZombie.charac.position.y > currentZombie.targetPosition.y)
-                    turnData->zombieList[currentZombieIndex].charac.position.y = currentZombie.charac.position.y - ZOMBIE_STEP;
-                else 
-                    turnData->zombieList[currentZombieIndex].charac.position.y = currentZombie.charac.position.y + ZOMBIE_STEP;
-            }
-            // if the zombie is Y aligned
-            else if (currentZombie.charac.position.y == currentZombie.targetPosition.y){
-                // it only goes left or right
-                if (currentZombie.charac.position.x > currentZombie.targetPosition.x)
-                    turnData->zombieList[currentZombieIndex].charac.position.x = currentZombie.charac.position.x - ZOMBIE_STEP;
-                else 
-                    turnData->zombieList[currentZombieIndex].charac.position.x = currentZombie.charac.position.x + ZOMBIE_STEP;
-            }
-            // if the zombie is not aligned 
-            else { 
-                // find the angle the zombie will go
-                double ratio = ((double)(currentZombie.targetPosition.y - currentZombie.charac.position.y)) / ((double)(currentZombie.targetPosition.x - currentZombie.charac.position.x));
-                double angle = atan(ratio);
+            // find the angle the zombie will go
+            double ratio = ((double)(currentZombie.targetPosition.y - currentZombie.charac.position.y)) / ((double)(currentZombie.targetPosition.x - currentZombie.charac.position.x));
+            double angle = atan(ratio);
 
-                // if the target is on the left of the zombie
-                if (currentZombie.targetPosition.x < currentZombie.charac.position.x ){
-                    // a 180° angle must be added to the angle
-                    angle = M_PI + angle;
-                }
-                
-                // update the zombie postion
-                turnData->zombieList[currentZombieIndex].charac.position.x = cos(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
-                turnData->zombieList[currentZombieIndex].charac.position.y = sin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;            
+            // if the target is on the left of the zombie
+            if (currentZombie.targetPosition.x < currentZombie.charac.position.x ){
+                // a 180° angle must be added to the angle
+                angle = M_PI + angle;
             }
+            
+            // update the zombie postion
+            turnData->zombieList[currentZombieIndex].charac.position.x = cos(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
+            turnData->zombieList[currentZombieIndex].charac.position.y = sin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;
         }
 
         // update the square dist between the zombie and the target 
@@ -372,21 +353,30 @@ int resolveConflicts(TURN_DATA * const turnData){
             int prev = currentZombie.charac.prevCharac;
             int next = currentZombie.charac.nextCharac;
 
+            // if this is the last part of the chain
             if (prev == FIRST_CHARAC && next == NO_MORE_CHARAC){
+                // empties the chain
                 turnData->firstZombieIndex = NO_MORE_CHARAC;
             }
             else {
+                // if this is the first part of the chain
                 if (prev == FIRST_CHARAC){
+                    // update the reference to the first part of the chain
                     turnData->firstZombieIndex = next;
                 }
+                // if this is the not first part of the chain
                 else {
+                    // update the previous part
                     turnData->zombieList[prev].charac.nextCharac = next;
                 }
-
+                // if this is the last part of the chain
                 if (next == NO_MORE_CHARAC){
+                    // update the previous part to make it the new last part of the chain
                     turnData->zombieList[prev].charac.prevCharac = NO_MORE_CHARAC;
                 }
+                // if this is not the last part of the chain
                 else {
+                    // update the next part of the chain
                     turnData->zombieList[next].charac.prevCharac = prev;
                 }
             }
@@ -406,21 +396,32 @@ int resolveConflicts(TURN_DATA * const turnData){
             int prev = turnData->humanList[currentZombie.closestHumanIndex].prevCharac;
             int next = turnData->humanList[currentZombie.closestHumanIndex].nextCharac;
 
+            // if this is the last part of the chain
             if (prev == FIRST_CHARAC && next == NO_MORE_CHARAC){
+                // empties the chain
                 turnData->firstHumanIndex = NO_MORE_CHARAC;
             }
+            // if this is not the last part of the chain 
             else {
+                // if this is the first part of the chain
                 if (prev == FIRST_CHARAC){
+                    // update the reference to the first part of the chain
                     turnData->firstHumanIndex = next;
                 }
+                // if this is the not first part of the chain
                 else {
+                    // update the previous part
                     turnData->humanList[prev].nextCharac = next;
                 }
 
+                // if this is the last part of the chain
                 if (next == NO_MORE_CHARAC){
+                    // update the previous part to make it the new last part of the chain
                     turnData->humanList[prev].prevCharac = NO_MORE_CHARAC;
                 }
+                // if this is not the last part of the chain
                 else {
+                    // update the next part of the chain
                     turnData->humanList[next].prevCharac = prev;
                 }
             }
@@ -447,40 +448,27 @@ int resolveConflicts(TURN_DATA * const turnData){
 
 // function used to determine the X and Y position of the hero depending on its current location
 // an angle and a distance
-int getHeroNextPosition(TURN_DATA * const turnData, double const angle, double const distance){
+void moveHeroFromAngle(TURN_DATA * const turnData, double const angle, double const distance){
             
-    // if the charac goes up 
-    if (angle == 90){
-        turnData->hero.position.y -= distance;
-    }
-    // if the charac goes down 
-    else if (angle == -90){
-        turnData->hero.position.y += distance;
-    }    
-    // if the charac goes right
-    else if (angle == 0){
-        turnData->hero.position.x += distance;
-    }
-    // if the charac goes left
-    else if (angle == 180){
-        turnData->hero.position.x -= distance;
-    }    
-    // if the charac is not aligned 
-    else { 
-        double radAngle = angle / 180 * M_PI;
+    double radAngle = angle / 180 * M_PI;
 
-        // update the charac postion
-        turnData->hero.position.x = cos(radAngle) * distance + turnData->hero.position.x;
-        turnData->hero.position.y = sin(radAngle) * distance + turnData->hero.position.y;
-    }
+    // update the charac postion
+    turnData->hero.position.x = cos(radAngle) * distance + turnData->hero.position.x;
+    turnData->hero.position.y = sin(radAngle) * distance + turnData->hero.position.y;
 
-    // if the charac is out of the map return -1
-    if (turnData->hero.position.y < 0 || turnData->hero.position.y > HEIGHT || turnData->hero.position.x < 0 || turnData->hero.position.y > WIDTH)
-        return -1;
-    else 
-        return 0;
+    // make sure the hero is not out of the map on the x axis
+    if (turnData->hero.position.x < 0)
+        turnData->hero.position.x = 0;
+    else if (turnData->hero.position.x > WIDTH)
+        turnData->hero.position.x = WIDTH;
+
+    // make sure the hero is not out of the map on the y axis
+    if (turnData->hero.position.y < 0)
+        turnData->hero.position.y = 0;
+    else if (turnData->hero.position.y > HEIGHT)
+        turnData->hero.position.y = HEIGHT;
+
 }
-
 
 
 // function used to determine the X and Y position of the hero depending on its current location
@@ -490,59 +478,29 @@ void randomlyMoveHero(TURN_DATA * const turnData){
     int dist = random() % HERO_MVMT;
     int angle = random() % 360;
 
-    getHeroNextPosition(turnData, angle, dist);                                                                                                                                                                                     
-
-    if (turnData->hero.position.x < 0)
-        turnData->hero.position.x = 0;
-    else if (turnData->hero.position.x > WIDTH)
-        turnData->hero.position.x = WIDTH;
-
-    if (turnData->hero.position.y < 0)
-        turnData->hero.position.y = 0;
-    else if (turnData->hero.position.y > HEIGHT)
-        turnData->hero.position.y = HEIGHT;
-
-    //int x = random() % (2*HERO_MVMT) - HERO_MVMT;
-
-    //int maxY = sqrt(HERO_MVMT * HERO_MVMT - x*x);
-
-    //int maxY = HERO_MVMT;
-    // int y = random() % (2*maxY) - maxY;
-    /*
-    turnData->hero.position.x = turnData->hero.position.x + x;
-    if (turnData->hero.position.x < 0)
-        turnData->hero.position.x = 0;
-    else if (turnData->hero.position.x > WIDTH)
-        turnData->hero.position.x = WIDTH;
-
-
-    turnData->hero.position.y = turnData->hero.position.y + y;
-    if (turnData->hero.position.y < 0)
-        turnData->hero.position.y = 0;
-    else if (turnData->hero.position.y > HEIGHT)
-        turnData->hero.position.y = HEIGHT;
-        */
-
-    
+    moveHeroFromAngle(turnData, angle, dist);  
 
 }
 
 
 // function that sends the hero toward the first human and update its position accordingly
-void moveHero(TURN_DATA * const turnData){
+void moveHeroTowardFirstHuman(TURN_DATA * const turnData){
     // find the hero next position
     int zadX = turnData->humanList[turnData->firstHumanIndex].position.x;
     int zadY = turnData->humanList[turnData->firstHumanIndex].position.y;
 
+    // find the square dist from the human
     int squareDistFromZad = getSquareDistance(zadX, zadY, turnData->hero.position.x, turnData->hero.position.y);
 
-    //fprintf(stderr, "square dist from zad: %d\n", squareDistFromZad);
-
+    // if the hero is within reach of the human
     if (squareDistFromZad <= HERO_MVMT * HERO_MVMT){
+        // hero position is human position
         turnData->hero.position.x = zadX;
         turnData->hero.position.y = zadY; 
     }
+    // if the hero is not within reach of the human
     else {
+        // hero moves towards him as much as possible
         double ratio = 1000 / (double)sqrtf(squareDistFromZad);
         int additionalX = (int)(ratio * (double)abs(zadX - turnData->hero.position.x));
         int additionalY = (int)(ratio * (double)abs(zadY - turnData->hero.position.y));
@@ -557,7 +515,6 @@ void moveHero(TURN_DATA * const turnData){
             turnData->hero.position.y -= additionalY + 1;
             //fprintf(stderr, "ratio, %f, hero ex %d, ey %d\n", ratio, turnData->hero.position.x, turnData->hero.position.y);
         }
-
 }
 
 int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
@@ -696,7 +653,7 @@ int main()
         if (bestStrategy.totalActions == NOT_PROCESSED){
 
             // move  the hero toward the first human
-            moveHero(&turnData);
+            moveHeroTowardFirstHuman(&turnData);
             // the distance between the hero and the zombies potentialy changed, so update it
             updateZombieDistToHero(&turnData);
 
@@ -727,8 +684,6 @@ int main()
             // the distance between the hero and the zombies potentialy changed, so update it
             updateZombieDistToHero(&turnData);
 
-            displayTurnData(&turnData);
-
             // updates which zombies and humans are alive 
             // get the resulting score
             resolveConflicts(&turnData);
@@ -740,6 +695,8 @@ int main()
                     bestStrategy.humansLeft[bestStrategy.currentAction], 
                     bestStrategy.zombiesLeft[bestStrategy.currentAction]
                     );
+
+            displayTurnData(&turnData);
 
             // increase the current step
             bestStrategy.currentAction++;
