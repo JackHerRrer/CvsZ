@@ -52,6 +52,7 @@ typedef struct ZOMBIE{
 
 typedef struct TURN_DATA{
     int totScore;
+    int turn;
 
     CHARAC hero;
 
@@ -75,9 +76,11 @@ typedef struct STRATEGY{
 } STRATEGY;
 
 // retrieve data from the game
-TURN_DATA initTurnData(){
+TURN_DATA initTurnData(int const turn){
 
     TURN_DATA data;
+
+    data.turn = turn;
 
     // retrieve the hero position        
     scanf("%d%d", &data.hero.position.x, &data.hero.position.y);
@@ -527,7 +530,7 @@ int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
     // as long as the there is not too many steps in the strategy
     // and there are zombies left
     // and there are humans left
-    while (strategy->totalActions < STRATEGY_MAX_STEP && turnData->aliveHumanCount > 0 && turnData->aliveZombieCount > 0){    
+    while (strategy->totalActions < (STRATEGY_MAX_STEP - turnData->turn) && turnData->aliveHumanCount > 0 && turnData->aliveZombieCount > 0){    
 
         // zombies target and and positions have been updated a first time just after the turn data has been gathered
         // only update them if this is not the first step
@@ -600,7 +603,7 @@ int main()
         int turnScore = 0;
 
         // retrieves the input 
-        turnData = initTurnData();
+        turnData = initTurnData(turn);
 
         // display the turn number, it must be done after the data has been retrieved otherwise it is considered has the previous turn
         fprintf(stderr, "turn %d\n", turn);
