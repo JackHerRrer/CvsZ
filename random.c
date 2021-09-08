@@ -139,6 +139,21 @@ int getNextHuman(TURN_DATA * const turnData, int currentHuman){
     return turnData->humanList[currentHuman].nextCharac;
 }
 
+void displayStrategy(STRATEGY * const strat){
+    fprintf(stderr, "score: %d, tot Action: %d\n", strat->totScore, strat->totalActions);
+
+    for (int i = 0; i < strat->totalActions; i++){
+        fprintf(stderr, "step: %d, turn score: %d, x: %d, y: %d, hl: %d, zl: %d\n",
+                i,
+                strat->turnScore[i],
+                strat->trajectory[i].x,
+                strat->trajectory[i].y,
+                strat->humansLeft[i],
+                strat->zombiesLeft[i]
+        );
+    }
+}
+
 void displayTurnData(TURN_DATA * const turnData){
     fprintf(stderr, "hero: %d, %d\n", turnData->hero.position.x, turnData->hero.position.y);
 
@@ -344,10 +359,10 @@ int resolveConflicts(TURN_DATA * const turnData){
 
     // iterates over the zombie chained list from the begining until the chain is over
     int currentZombieIndex = turnData->firstZombieIndex;
-    while (currentZombieIndex != NO_MORE_CHARAC){
+    while (currentZombieIndex != NO_MORE_CHARAC && turnData->aliveHumanCount > 0){
         ZOMBIE currentZombie = turnData->zombieList[currentZombieIndex];
         // if the zombie is within range of the hero
-        if (currentZombie.squareDistToHero < HERO_RANGE * HERO_RANGE){
+        if (currentZombie.squareDistToHero <= HERO_RANGE * HERO_RANGE){
             // decrease the alive zombie counter
             turnData->aliveZombieCount--;
             // set the status of the zombie as dead
@@ -356,11 +371,12 @@ int resolveConflicts(TURN_DATA * const turnData){
             int prev = currentZombie.charac.prevCharac;
             int next = currentZombie.charac.nextCharac;
 
-            // if this is the last part of the chain
+            // if this is the only part of the chain
             if (prev == FIRST_CHARAC && next == NO_MORE_CHARAC){
                 // empties the chain
                 turnData->firstZombieIndex = NO_MORE_CHARAC;
             }
+            // if there are at least 2 parts in the chain
             else {
                 // if this is the first part of the chain
                 if (prev == FIRST_CHARAC){
@@ -375,7 +391,7 @@ int resolveConflicts(TURN_DATA * const turnData){
                 // if this is the last part of the chain
                 if (next == NO_MORE_CHARAC){
                     // update the previous part to make it the new last part of the chain
-                    turnData->zombieList[prev].charac.prevCharac = NO_MORE_CHARAC;
+                    turnData->zombieList[prev].charac.nextCharac = NO_MORE_CHARAC;
                 }
                 // if this is not the last part of the chain
                 else {
@@ -385,7 +401,7 @@ int resolveConflicts(TURN_DATA * const turnData){
             }
         }
         // if the zombie is located at its target location
-        // and the target is still alive (we don't want to decrease the human count 2 times if the 2 zombies arrives at the same time)
+        // and the target is still alive (we don't want to decrease the human count 2 times if 2 zombies arrives at the same time)
         else if (currentZombie.charac.position.x == currentZombie.targetPosition.x && 
                 currentZombie.charac.position.y == currentZombie.targetPosition.y &&
                 turnData->humanList[currentZombie.closestHumanIndex].alive == true){
@@ -399,12 +415,12 @@ int resolveConflicts(TURN_DATA * const turnData){
             int prev = turnData->humanList[currentZombie.closestHumanIndex].prevCharac;
             int next = turnData->humanList[currentZombie.closestHumanIndex].nextCharac;
 
-            // if this is the last part of the chain
+            // if this is the only part of the chain
             if (prev == FIRST_CHARAC && next == NO_MORE_CHARAC){
                 // empties the chain
                 turnData->firstHumanIndex = NO_MORE_CHARAC;
             }
-            // if this is not the last part of the chain 
+            // if there are at least 2 parts in the chain
             else {
                 // if this is the first part of the chain
                 if (prev == FIRST_CHARAC){
@@ -420,7 +436,7 @@ int resolveConflicts(TURN_DATA * const turnData){
                 // if this is the last part of the chain
                 if (next == NO_MORE_CHARAC){
                     // update the previous part to make it the new last part of the chain
-                    turnData->humanList[prev].prevCharac = NO_MORE_CHARAC;
+                    turnData->humanList[prev].nextCharac = NO_MORE_CHARAC;
                 }
                 // if this is not the last part of the chain
                 else {
@@ -437,7 +453,12 @@ int resolveConflicts(TURN_DATA * const turnData){
         turnData->totScore = -1;
         return -1;
     }
-
+    else if (turnData->aliveHumanCount < 0){
+        fprintf(stderr, "Error when resolving conflict\n");
+        turnData->totScore = -1;
+        return -1;
+    }
+    
     // calculate how many point has been earned
     score = getTurnScore(oldHumanCount, oldZombieCount - turnData->aliveZombieCount);
     
@@ -518,6 +539,29 @@ void moveHeroTowardFirstHuman(TURN_DATA * const turnData){
             turnData->hero.position.y -= additionalY + 1;
             //fprintf(stderr, "ratio, %f, hero ex %d, ey %d\n", ratio, turnData->hero.position.x, turnData->hero.position.y);
         }
+}
+
+// function used to try a specific strategy
+int tryStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
+    fprintf(stderr, "\ntry Strategy\n");
+    for (int i =0; i < strategy->totalActions; i++){
+        fprintf(stderr, "step: %d\n", i);
+        // zombies target and and positions have been updated a first time just after the turn data has been gathered
+        // only update them if this is not the first step
+        if (i > 0){
+            updateZombieTarget(turnData);
+            moveZombies(turnData);
+        }
+
+        // update the hero position with the strategy step
+        turnData->hero.position = strategy->trajectory[i];
+
+        // the distance between the hero and the zombies potentialy changed, so update it
+        updateZombieDistToHero(turnData);
+
+        int turnScore = resolveConflicts2(turnData);
+        
+    }
 }
 
 int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
@@ -644,6 +688,7 @@ int main()
 
                 // replace the old strategy with the new strategy
                 bestStrategy = randomStrategy;
+
             }
 
             end = clock();
@@ -683,9 +728,13 @@ int main()
             // get the current step score
             turnScore += bestStrategy.turnScore[bestStrategy.currentAction];
             
-            // simulate the turn again even though it is useless for debug reasons
+            // simulate the turn again even though it is useless. It is used for debug reasons
             // the distance between the hero and the zombies potentialy changed, so update it
-            updateZombieDistToHero(&turnData);
+            // updateZombieDistToHero(&turnData);
+
+            // fprintf(stderr, "before conflict\n");
+            // displayTurnData(&turnData);
+
 
             // updates which zombies and humans are alive 
             // get the resulting score
@@ -699,8 +748,9 @@ int main()
                     bestStrategy.zombiesLeft[bestStrategy.currentAction]
                     );
 
-            displayTurnData(&turnData);
-
+            fprintf(stderr, "\nAfter conflict\n");
+            // displayTurnData(&turnData);
+            // displayStrategy(&bestStrategy);
             // increase the current step
             bestStrategy.currentAction++;
         }
