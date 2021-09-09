@@ -5,6 +5,8 @@
 #include <math.h>
 #include <time.h>
 
+#define TIME_ANALYSIS
+
 #define WIDTH 16000
 #define HEIGHT 9000
 
@@ -24,6 +26,17 @@
 #define MAX_DIST 19000 //18357 in reality
 
 #define STRATEGY_MAX_STEP 50
+
+#ifdef TIME_ANALYSIS
+    time_t updateZombieTargetTime;
+    time_t moveZombiesTime;
+    time_t updateZombieDistToHeroTime;
+    time_t getTurnScoreTime;
+    time_t resolveConflictsTime;
+    time_t randomlyMoveHeroTime;
+#endif
+
+fibo[101] = {0, 1, 3, 6, 11, 19, 32, 53, 87, 142, 231, 375, 608, 985, 1595, 2582, 4179, 6763, 10944, 17709, 28655, 46366, 75023, 121391, 196416, 317809, 514227, 832038, 1346267, 2178307, 3524576, 5702885, 9227463, 14930350, 24157815, 39088167, 63245984, 102334153, 165580139, 267914294, 433494435, 701408731, 1134903168, 1836311901, 2971215071, 4807526974, 7778742047, 12586269023, 20365011072, 32951280097, 53316291171, 86267571270, 139583862443, 225851433715, 365435296160, 591286729877, 956722026039, 1548008755918, 2504730781959, 4052739537879, 6557470319840, 10610209857721, 17167680177563, 27777890035286, 44945570212851, 72723460248139, 117669030460992, 190392490709133, 308061521170127, 498454011879262, 806515533049391, 1304969544928655, 2111485077978048, 3416454622906705, 5527939700884755, 8944394323791462, 14472334024676219, 23416728348467683, 37889062373143904, 61305790721611589, 99194853094755495, 160500643816367086, 259695496911122583, 420196140727489671, 679891637638612256, 1100087778366101929, 1779979416004714187, 2880067194370816118, 4660046610375530307, 7540113804746346427, 12200160415121876736, 19740274219868223165, 31940434634990099903, 51680708854858323070, 83621143489848422975, 135301852344706746047, 218922995834555169024, 354224848179261915073, 573147844013817084099, 927372692193078999174};
 
 typedef struct POSITION{
     int x;
@@ -189,12 +202,18 @@ void displayTurnData(TURN_DATA * const turnData){
 
 // return the square distance between 2 points (floor rounded)
 // the square is returned to avoid using sqrt() function, thus saving precious exec time
-int getSquareDistance(int const x1, int const y1, int const x2, int const y2){
+static inline int getSquareDistance(int const x1, int const y1, int const x2, int const y2){
     return (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
 }
 
 // find the target of all the zombies
 void updateZombieTarget(TURN_DATA * const turnData){
+
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+
     // iterates over the zombie chained list from the begining until the chain is over
     int currentZombieIndex = turnData->firstZombieIndex;
 
@@ -261,10 +280,21 @@ void updateZombieTarget(TURN_DATA * const turnData){
 
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
+
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        updateZombieTargetTime += (end - start);
+    #endif
 }
 
 // move the zombies position toward their target
 void moveZombies(TURN_DATA * const turnData){
+    
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+    
     // iterates over the zombie chained list from the begining until the chain is over
     int currentZombieIndex = turnData->firstZombieIndex;
     while (currentZombieIndex != NO_MORE_CHARAC){
@@ -306,12 +336,23 @@ void moveZombies(TURN_DATA * const turnData){
 
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
+
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        moveZombiesTime += (end - start);
+    #endif
 }
 
 // update the distance between the hero and the zombies
 // to avoid unecessary process time, only the zombies that can potentialy be reached by the hero are updated
 // the others are left as is 
 void updateZombieDistToHero(TURN_DATA * const turnData){
+    
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+    
     // iterates over the zombie chained list from the begining until the chain is over
     int currentZombieIndex = turnData->firstZombieIndex;
     while (currentZombieIndex != NO_MORE_CHARAC){
@@ -325,26 +366,43 @@ void updateZombieDistToHero(TURN_DATA * const turnData){
         }
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
+
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        updateZombieDistToHeroTime += (end - start);
+    #endif
 }
 
 // function used to calculate how many point has been earned from killing zombies this turn
 int getTurnScore(int const humanCount, int const killedZombiesCount){
-    int baseScore = humanCount * humanCount * 10;
-    int score = 0;
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+    
+    // int baseScore = humanCount * humanCount * 10;
+    // int score = 0;
 
-    int F0 = 0, F1 = 1; // variables used to calculate the fibonacci sequence
+    // int F0 = 0, F1 = 1; // variables used to calculate the fibonacci sequence
 
     // if there is no human left, we lost, simply return 0;
-    if (humanCount == 0)
-        return -1;
+    // if (humanCount == 0)
+    //    return -1;
 
-    // loop used to calculate the next fibonacci number in order to process the score for each zombi killed 
-    for (int i = 0; i < killedZombiesCount; i++){
-        int FSum = F0 + F1;
-        score += baseScore * FSum;
-        F0 = F1;
-        F1 = FSum;
-    }
+    // loop used to calculate the next fibonacci number in order to process the score for each zombie killed 
+    // for (int i = 0; i < killedZombiesCount; i++){
+    //     int FSum = F0 + F1;
+    //     score += baseScore * FSum;
+    //     F0 = F1;
+    //     F1 = FSum;
+    // }
+
+    int score = humanCount * humanCount * 10 * fibo[killedZombiesCount];
+
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        getTurnScoreTime += (end - start);
+    #endif
 
     return score;
 }
@@ -352,7 +410,11 @@ int getTurnScore(int const humanCount, int const killedZombiesCount){
 // function used to update the zombie list and the human list
 // it returns how many point has been earned this turn
 int resolveConflicts(TURN_DATA * const turnData){
-    
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+
     int oldZombieCount = turnData->aliveZombieCount; // stores how many zombies there was before resolving the conflict
     int oldHumanCount = turnData->aliveHumanCount; // stores how many zombies there was before resolving the conflict
     int score = 0;
@@ -447,6 +509,11 @@ int resolveConflicts(TURN_DATA * const turnData){
         }
         currentZombieIndex = getNextZombie(turnData, currentZombieIndex);
     }
+    
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        resolveConflictsTime += (end - start);
+    #endif
 
     // if no human is alive, turn score is -1
     if (turnData->aliveHumanCount == 0){
@@ -499,10 +566,20 @@ void moveHeroFromAngle(TURN_DATA * const turnData, double const angle, double co
 // an angle and a distance
 void randomlyMoveHero(TURN_DATA * const turnData){   
 
+    #ifdef TIME_ANALYSIS
+        time_t start, end;
+        start = clock();
+    #endif
+
     int dist = random() % HERO_MVMT;
     int angle = random() % 360;
 
     moveHeroFromAngle(turnData, angle, dist);  
+
+    #ifdef TIME_ANALYSIS
+        end = clock();
+        randomlyMoveHeroTime += (end - start);
+    #endif
 
 }
 
@@ -559,7 +636,7 @@ int tryStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
         // the distance between the hero and the zombies potentialy changed, so update it
         updateZombieDistToHero(turnData);
 
-        int turnScore = resolveConflicts2(turnData);
+        int turnScore = resolveConflicts(turnData);
         
     }
 }
@@ -627,7 +704,7 @@ int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
 int main()
 {
     // Use current time as seed for random generator
-    srand(time(0));
+    // srand(time(0));
 
     TURN_DATA turnData;
     int totalScore = 0;
@@ -642,6 +719,15 @@ int main()
 
     // game loop
     for (int turn = 1; 1; turn++) {
+
+        #ifdef TIME_ANALYSIS
+            updateZombieTargetTime = 0;
+            moveZombiesTime = 0;
+            updateZombieDistToHeroTime = 0;
+            getTurnScoreTime = 0;
+            resolveConflictsTime = 0;
+            randomlyMoveHeroTime = 0;
+        #endif
 
         // reset the turn score
         int turnScore = 0;
@@ -771,6 +857,17 @@ int main()
         }
 
         printf("%d %d\n", turnData.hero.position.x, turnData.hero.position.y);    
+
+        #ifdef TIME_ANALYSIS
+            fprintf(stderr, "\nupdateZombieTargetTime: %ld\nmoveZombiesTime: %ld\nupdateZombieDistToHeroTime: %ld\ngetTurnScoreTime:%ld\nresolveConflictsTime: %ld\nrandomlyMoveHeroTime: %ld\n",
+                        updateZombieTargetTime,
+                        moveZombiesTime,
+                        updateZombieDistToHeroTime,
+                        getTurnScoreTime,
+                        resolveConflictsTime,
+                        randomlyMoveHeroTime
+            );
+        #endif
     }
     
     return 0;
