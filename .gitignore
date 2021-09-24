@@ -1,1 +1,6 @@
 .vscode/
+random/random
+random/random_all
+random/random_tests
+random/random_utils.o
+random/random.o

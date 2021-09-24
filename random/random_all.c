@@ -1,3 +1,5 @@
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,17 +28,6 @@
 #define MAX_DIST 19000 //18357 in reality
 
 #define STRATEGY_MAX_STEP 50
-
-#ifdef TIME_ANALYSIS
-    time_t updateZombieTargetTime;
-    time_t moveZombiesTime;
-    time_t updateZombieDistToHeroTime;
-    time_t getTurnScoreTime;
-    time_t resolveConflictsTime;
-    time_t randomlyMoveHeroTime;
-#endif
-
-fibo[101] = {0, 1, 3, 6, 11, 19, 32, 53, 87, 142, 231, 375, 608, 985, 1595, 2582, 4179, 6763, 10944, 17709, 28655, 46366, 75023, 121391, 196416, 317809, 514227, 832038, 1346267, 2178307, 3524576, 5702885, 9227463, 14930350, 24157815, 39088167, 63245984, 102334153, 165580139, 267914294, 433494435, 701408731, 1134903168, 1836311901, 2971215071, 4807526974, 7778742047, 12586269023, 20365011072, 32951280097, 53316291171, 86267571270, 139583862443, 225851433715, 365435296160, 591286729877, 956722026039, 1548008755918, 2504730781959, 4052739537879, 6557470319840, 10610209857721, 17167680177563, 27777890035286, 44945570212851, 72723460248139, 117669030460992, 190392490709133, 308061521170127, 498454011879262, 806515533049391, 1304969544928655, 2111485077978048, 3416454622906705, 5527939700884755, 8944394323791462, 14472334024676219, 23416728348467683, 37889062373143904, 61305790721611589, 99194853094755495, 160500643816367086, 259695496911122583, 420196140727489671, 679891637638612256, 1100087778366101929, 1779979416004714187, 2880067194370816118, 4660046610375530307, 7540113804746346427, 12200160415121876736, 19740274219868223165, 31940434634990099903, 51680708854858323070, 83621143489848422975, 135301852344706746047, 218922995834555169024, 354224848179261915073, 573147844013817084099, 927372692193078999174};
 
 typedef struct POSITION{
     int x;
@@ -87,6 +78,149 @@ typedef struct STRATEGY{
     int humansLeft[STRATEGY_MAX_STEP];
     int zombiesLeft[STRATEGY_MAX_STEP];
 } STRATEGY;
+
+#define TIME_ANALYSIS
+
+#ifdef TIME_ANALYSIS
+    time_t overallTime;
+    time_t updateZombieTargetTime;
+    time_t moveZombiesTime;
+    time_t updateZombieDistToHeroTime;
+    time_t resolveConflictsTime;
+    time_t randomlyMoveHeroTime;
+#endif
+
+
+// retrieve data from the game
+TURN_DATA initTurnData(int const turn);
+
+double minimaxSin(double angle);
+
+double minimaxCos(double angle);
+
+
+// find the next zombie in the chain list
+int getNextZombie(TURN_DATA * const turnData, int currentZombie);
+// find the next human in the chain list
+int getNextHuman(TURN_DATA * const turnData, int currentHuman);
+
+void displayStrategy(STRATEGY * const strat);
+
+void displayTurnData(TURN_DATA * const turnData);
+
+// return the square distance between 2 points (floor rounded)
+// the square is returned to avoid using sqrt() function, thus saving precious exec time
+static inline int getSquareDistance(int const x1, int const y1, int const x2, int const y2);
+
+// find the target of all the zombies
+void updateZombieTarget(TURN_DATA * const turnData);
+
+// move the zombies position toward their target
+void moveZombies(TURN_DATA * const turnData);
+// update the distance between the hero and the zombies
+// to avoid unecessary process time, only the zombies that can potentialy be reached by the hero are updated
+// the others are left as is 
+void updateZombieDistToHero(TURN_DATA * const turnData);
+
+// function used to calculate how many point has been earned from killing zombies this turn
+int getTurnScore(int const humanCount, int const killedZombiesCount);
+
+// function used to update the zombie list and the human list
+// it returns how many point has been earned this turn
+int resolveConflicts(TURN_DATA * const turnData);
+
+// function used to determine the X and Y position of the hero depending on its current location
+// an angle and a distance
+void moveHeroFromAngle(TURN_DATA * const turnData, double const angle, double const distance);
+
+// function used to determine the X and Y position of the hero depending on its current location
+// an angle and a distance
+void randomlyMoveHero(TURN_DATA * const turnData);
+
+// function that sends the hero toward the first human and update its position accordingly
+void moveHeroTowardFirstHuman(TURN_DATA * const turnData);
+
+// function used to try a specific strategy
+int tryStrategy(TURN_DATA * const turnData, STRATEGY * const strategy);
+
+int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy);
+
+
+// list of the mulltipliers used to calculates a score
+int fibo[41] = {0, 1, 3, 6, 11, 19, 32, 53, 87, 142, 231, 375, 608, 985, 1595, 2582, 4179, 6763, 10944, 17709, 28655, 46366, 75023, 121391, 196416, 317809, 514227, 832038, 1346267, 2178307, 3524576, 5702885, 9227463, 14930350, 24157815, 39088167, 63245984, 102334153, 165580139, 267914294, 433494435};
+
+// approximation of the sin function 
+// input should be between -2*PI and 2*PI
+// a polynomial function approximate the sin function between 0 and PI/4
+// this quadrant is sufficent to process the other quadrants
+// https://publik-void.github.io/sin-cos-approximations/#_sin_rel_error_minimized_degree_5
+double minimaxSin(double angle){  
+    
+    double x1;
+    
+    if (angle < 0){
+        angle += 2 * M_PI;
+    }
+
+    if (angle <=  M_PI / 2){
+        x1 = angle;
+    }
+    else if ( angle > M_PI / 2 && angle <= M_PI){
+        x1 = M_PI - angle;
+    }
+    else if (angle > M_PI && angle <= (3.0 / 2.0 * M_PI)){
+        x1 = angle - M_PI;
+    }
+    else {
+        x1 = 2* M_PI - angle;
+    }
+
+    double x2 = x1 * x1;
+
+    //double y = x1*(0.999999060898976336474926982596043563 + x2*(-0.166655540927576933646197607200949732 + x2*(0.00831189980138987918776159520367912155 - 0.000184881402886071911033139680005197992*x2)));
+    double y = x1*(0.999696773139043458688377873291916597 + x2*(-0.165673079320546139044772080908073214 + 0.00751437717830006597565730091774665237*x2));
+    //double y = x1*(0.992787728983164233059810507773856991 - 0.146210290215383029232877806264248677*x2);
+    
+    if (angle > M_PI){
+        return - y;
+    }
+
+    return y;
+}
+
+double minimaxCos(double angle){
+        
+    double x1;
+    
+    if (angle < 0){
+        angle += 2 * M_PI;
+    }
+
+    if (angle <=  M_PI / 2){
+        x1 = angle;
+    }
+    else if ( angle > M_PI / 2 && angle <= M_PI){
+        x1 = M_PI - angle;
+    }
+    else if (angle > M_PI && angle <= (3.0 / 2.0 * M_PI)){
+        x1 = angle - M_PI;
+    }
+    else {
+        x1 = 2* M_PI - angle;
+    }
+
+    double x2 = x1 * x1;
+
+    //double y = 0.997372645040477990699027658698347186 + x2*(-0.490966242354240750313919970830772248 + 0.0351569652103601536791893003031729288*x2);
+    double y = 0.999970210689953068626323587055728078 + x2*(-0.499782706704688809140466617726333455 + x2*(0.0413661149638482252569383872576459943 - 0.0012412397582398600702129604944720102*x2));
+    
+    if (angle > M_PI / 2 && angle <= 3.0 / 2.0 * M_PI ){
+        return - y;
+    }
+
+    return y;
+}
+
 
 // retrieve data from the game
 TURN_DATA initTurnData(int const turn){
@@ -313,15 +447,18 @@ void moveZombies(TURN_DATA * const turnData){
             double ratio = ((double)(currentZombie.targetPosition.y - currentZombie.charac.position.y)) / ((double)(currentZombie.targetPosition.x - currentZombie.charac.position.x));
             double angle = atan(ratio);
 
+
             // if the target is on the left of the zombie
             if (currentZombie.targetPosition.x < currentZombie.charac.position.x ){
                 // a 180° angle must be added to the angle
                 angle = M_PI + angle;
             }
-            
+            //fprintf(stderr, "%f\n", angle);
+
             // update the zombie postion
-            turnData->zombieList[currentZombieIndex].charac.position.x = cos(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
-            turnData->zombieList[currentZombieIndex].charac.position.y = sin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;
+            //turnData->zombieList[currentZombieIndex].charac.position.x = cosLookup[(int)(angle*1000/2*M_PI)] * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
+            turnData->zombieList[currentZombieIndex].charac.position.x = minimaxCos(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.x;
+            turnData->zombieList[currentZombieIndex].charac.position.y = minimaxSin(angle) * ZOMBIE_STEP + turnData->zombieList[currentZombieIndex].charac.position.y;
         }
 
         // update the square dist between the zombie and the target 
@@ -375,34 +512,8 @@ void updateZombieDistToHero(TURN_DATA * const turnData){
 
 // function used to calculate how many point has been earned from killing zombies this turn
 int getTurnScore(int const humanCount, int const killedZombiesCount){
-    #ifdef TIME_ANALYSIS
-        time_t start, end;
-        start = clock();
-    #endif
-    
-    // int baseScore = humanCount * humanCount * 10;
-    // int score = 0;
-
-    // int F0 = 0, F1 = 1; // variables used to calculate the fibonacci sequence
-
-    // if there is no human left, we lost, simply return 0;
-    // if (humanCount == 0)
-    //    return -1;
-
-    // loop used to calculate the next fibonacci number in order to process the score for each zombie killed 
-    // for (int i = 0; i < killedZombiesCount; i++){
-    //     int FSum = F0 + F1;
-    //     score += baseScore * FSum;
-    //     F0 = F1;
-    //     F1 = FSum;
-    // }
 
     int score = humanCount * humanCount * 10 * fibo[killedZombiesCount];
-
-    #ifdef TIME_ANALYSIS
-        end = clock();
-        getTurnScoreTime += (end - start);
-    #endif
 
     return score;
 }
@@ -544,8 +655,8 @@ void moveHeroFromAngle(TURN_DATA * const turnData, double const angle, double co
     double radAngle = angle / 180 * M_PI;
 
     // update the charac postion
-    turnData->hero.position.x = cos(radAngle) * distance + turnData->hero.position.x;
-    turnData->hero.position.y = sin(radAngle) * distance + turnData->hero.position.y;
+    turnData->hero.position.x = minimaxCos(radAngle) * distance + turnData->hero.position.x;
+    turnData->hero.position.y = minimaxSin(radAngle) * distance + turnData->hero.position.y;
 
     // make sure the hero is not out of the map on the x axis
     if (turnData->hero.position.x < 0)
@@ -621,6 +732,9 @@ void moveHeroTowardFirstHuman(TURN_DATA * const turnData){
 // function used to try a specific strategy
 int tryStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
     fprintf(stderr, "\ntry Strategy\n");
+
+    int totScore = 0;
+
     for (int i =0; i < strategy->totalActions; i++){
         fprintf(stderr, "step: %d\n", i);
         // zombies target and and positions have been updated a first time just after the turn data has been gathered
@@ -637,8 +751,10 @@ int tryStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
         updateZombieDistToHero(turnData);
 
         int turnScore = resolveConflicts(turnData);
-        
+        totScore += turnScore;
     }
+
+    return totScore;
 }
 
 int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
@@ -701,6 +817,7 @@ int tryRandomStrategy(TURN_DATA * const turnData, STRATEGY * const strategy){
     return strategy->totScore;
 }
 
+
 int main()
 {
     // Use current time as seed for random generator
@@ -721,13 +838,16 @@ int main()
     for (int turn = 1; 1; turn++) {
 
         #ifdef TIME_ANALYSIS
+            overallTime = 0;
             updateZombieTargetTime = 0;
             moveZombiesTime = 0;
             updateZombieDistToHeroTime = 0;
-            getTurnScoreTime = 0;
             resolveConflictsTime = 0;
             randomlyMoveHeroTime = 0;
+
+            time_t startOverall = clock();
         #endif
+
 
         // reset the turn score
         int turnScore = 0;
@@ -859,11 +979,13 @@ int main()
         printf("%d %d\n", turnData.hero.position.x, turnData.hero.position.y);    
 
         #ifdef TIME_ANALYSIS
-            fprintf(stderr, "\nupdateZombieTargetTime: %ld\nmoveZombiesTime: %ld\nupdateZombieDistToHeroTime: %ld\ngetTurnScoreTime:%ld\nresolveConflictsTime: %ld\nrandomlyMoveHeroTime: %ld\n",
+            time_t stopOverall = clock();
+            fprintf(stderr, "\noverallTime: %ld, sum: %ld\nupdateZombieTargetTime: %ld\nmoveZombiesTime: %ld\nupdateZombieDistToHeroTime: %ld\nresolveConflictsTime: %ld\nrandomlyMoveHeroTime: %ld\n",
+                        stopOverall - startOverall,
+                        updateZombieTargetTime + moveZombiesTime + updateZombieDistToHeroTime + resolveConflictsTime + randomlyMoveHeroTime,
                         updateZombieTargetTime,
                         moveZombiesTime,
                         updateZombieDistToHeroTime,
-                        getTurnScoreTime,
                         resolveConflictsTime,
                         randomlyMoveHeroTime
             );
